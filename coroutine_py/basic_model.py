@@ -33,7 +33,8 @@ class _Future:
     def set_result(self, res=None):
         self.result = res
         self.state = "done"
-        self.loop.call_now(None, self.callback, self)
+        if self.callback != None:
+            self.loop.call_now(None, self.callback, self)
 
 class _Eventloop:
     def __init__(self):
@@ -47,24 +48,24 @@ class _Eventloop:
         return _current_loop
 
     def call_now(self, future: _Future, func: callable, *args, **kwargs): # type: ignore
+        if future == None:
+            future = _Future()
         self.ready.append((future, func, args, kwargs))
-
-    def run_to_end(self, func: callable=None, *args, **kwargs):
-        self.ready.append((None, func, args, kwargs))
 
     def run(self):
         while self.ready:
             coro = self.ready.pop()
             future, func, args, kwargs = coro
-            # right now this func can be blocking the whole thread
-            # in temporal, this should be sending to remote synchronously
-            # and the whole workflow probably should be waiting for the remote to give a callback for some future
-            # TODO: feature1 we need to get a remote server reply to continue the runtime
-            # now we focus on coroutine first
-            res = func(*args, **kwargs)
-            if future != None:
-                # callback is a part of it
-                future.set_result(res)
+            try:
+                _ = func(*args, **kwargs)
+            except _CoroutineStop as es:
+                future.set_result(es.get_value())
+
+class _CoroutineStop(Exception):
+    def __init__(self, value:any):
+        self.value = value
+    def get_value(self):
+        return self.value
 
 # CoroutineContext is a simple state machine
 class _CoroutineContext:
@@ -87,19 +88,33 @@ class _CoroutineContext:
             self.coroutine(self)
 
 def coroutine_simple_1(message:str):
+    # TODO: right now we don't await on multiple futures
     def _coroutine_simple_1(con:_CoroutineContext=_CoroutineContext()):
-        print(f"simple 1 executed with message {con.params.get('message')}")
-        return "result_activity_1"
+        loop = _Eventloop.get_current_eventloop()
+        if con.state == 0:
+            print(f"simple 1 executed with message {con.params.get('message')}")
+            con.state = 1
+            ftr1 = _Future()
+            ftr1.set_callback(con.resume)
+            loop.call_now(ftr1, coroutine_simple_2, "call from simple 1--first time")
+            return ftr1
+        if con.state == 1:
+            # TODO: shall raise stop iteration
+            raise _CoroutineStop("result_activity_1")
+
     con = _CoroutineContext()
     con.params["message"] = message
+    con.set_coroutine(_coroutine_simple_1)
     return _coroutine_simple_1(con)
 
 def coroutine_simple_2(message:str):
     def _coroutine_simple_2(con:_CoroutineContext=_CoroutineContext()):
         print(f"simple 2 executed with message {con.params.get('message')}")
-        return "result_activity_2"
+        raise _CoroutineStop("result_activity_2")
+
     con = _CoroutineContext()
     con.params["message"] = message
+    con.set_coroutine(_coroutine_simple_2)
     return _coroutine_simple_2(con)
 
 def common_workflow(name: str):
@@ -143,7 +158,7 @@ def common_workflow(name: str):
         calculation_result = con.history.get("calculation_result")
         final_result = calculation_result + 100
         print(f"Step {con.state}: final result is {final_result}")
-        return final_result
+        raise _CoroutineStop(final_result)
 
     con = _CoroutineContext(params={"name": name})
     con.set_coroutine(_common_workflow)
@@ -151,6 +166,6 @@ def common_workflow(name: str):
 
 if __name__ == "__main__":
     c_runtime = _Eventloop.get_current_eventloop()
-    c_runtime.run_to_end(common_workflow, "GLOVER")
-    c_runtime.run_to_end(common_workflow, "REBETA")
+    c_runtime.call_now(None, common_workflow, "GLOVER")
+    c_runtime.call_now(None, common_workflow, "REBETA")
     c_runtime.run()
