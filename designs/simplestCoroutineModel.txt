@@ -1,0 +1,22 @@
+title Simplest COROUTINE Implementation
+
+participant coro-1 #lightblue
+participant coro-2 #lightblue
+participant future #lightgreen
+participant event_loop #lightyellow
+
+
+coro-1<-event_loop: <color:#blue>execute</color> func of coro-1
+coro-1->coro-1: run non-chained coroutine code \nuntil reach await another coroutine
+coro-1->future:create future,\nadd  <color:#red>coro-1.resume</color> to future <color:#red>future.callback</color>
+coro-1<--future
+note over future,event_loop
+future->(3)event_loop
+coro-1->event_loop:register future, coro2 to event_loop,\nand y<color:#red>ield coro-1/return</color> directly waiting for resume\n
+
+event_loop -> coro-2:<color:#blue>execute</color>  func of coro-2\n
+coro-2-->event_loop:return result (assume not suspended for a coro-3\n
+future<-event_loop:set coro-2's return to <color:#red>future.set_result</color>
+future->event_loop:future.set_result\ntrigger <color:#red>furue.schedule_callback</color>,\nnow the resume function of coro-1 is registered as callback\nso future register this callback to event_loop,\nadd future itself as parameter of this callback
+coro-1<-event_loop:<color:#blue>execute</color>  func of resume, with params of future
+coro-1->coro-1: resume function also \nhas <color:#red>coroutine history context</color> \nof the previous stop point, \nso continues from there
