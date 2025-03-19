@@ -39,6 +39,7 @@ class _Future:
 class _Eventloop:
     def __init__(self):
         self.ready = []
+        self._future_tack = []
 
     @staticmethod
     def get_current_eventloop():
@@ -48,13 +49,15 @@ class _Eventloop:
         return _current_loop
 
     def call_now(self, future: _Future, func: callable, *args, **kwargs): # type: ignore
-        if future == None:
-            future = _Future()
+        # if future == None:
+        #     future = _Future()
         self.ready.append((future, func, args, kwargs))
 
     def run(self):
         while self.ready:
             future, func, args, kwargs = self.ready.pop()
+            if future is not None:
+                self._future_tack.append(future)
             try:
                 next_future = func(*args, **kwargs)
                 # TODO: here has a core problem
@@ -62,7 +65,11 @@ class _Eventloop:
                 # finish and then call this future's callback again
                 # or our tasks are lost
             except _CoroutineStop as es:
-                future.set_result(es.get_value())
+                if self._future_tack:
+                    future = self._future_tack.pop()
+                    if future:
+                        future.set_result(es.get_value())
+                # future.set_result(es.get_value())
 
 class _CoroutineStop(Exception):
     def __init__(self, value:any):
@@ -156,9 +163,10 @@ def common_workflow(name: str):
             message = con.history.get("coroutine_simple_1")
 
             ftr2 = _Future(callback=con.resume)
+            ftr2.set_callback(con.resume)
             loop.call_now(ftr2, coroutine_simple_2, message)
             print(f"YIELD --- _common_workflow from state {con.state}")
-            return future
+            return ftr2
 
         calculation_result = con.history.get("calculation_result")
         final_result = calculation_result + 100
