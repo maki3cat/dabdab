@@ -1,9 +1,11 @@
 from .runtime import _Eventloop, _Future, _CompletionExc
 
+
 class _CoroutineContext:
+
     def __init__(
-            self, params:dict={}, *, 
-            state:int=0, history: dict={}, current_coro=""):
+        self, params: dict = {}, *, state: int = 0, history: dict = {}, current_coro=""
+    ):
         self.state = state
         self.history = history
         self.current_coro = None
@@ -18,15 +20,18 @@ class _CoroutineContext:
         self.history[self.current_coro] = future.result
         return self.coroutine(self)
 
-def coroutine_simple_1(message:str):
-    def _coroutine_simple_1(con:_CoroutineContext=_CoroutineContext()):
+
+def coroutine_simple_1(message: str):
+    def _coroutine_simple_1(con: _CoroutineContext = _CoroutineContext()):
         loop = _Eventloop.get_current_eventloop()
         if con.state == 0:
-            print(f"simple 1 executed with message {con.params.get('message')}")
+            print(
+                f"simple 1 executed with message {con.params.get('message')}")
             con.state = 1
             ftr1 = _Future()
             ftr1.set_callback(con.resume)
-            loop.call_now(ftr1, coroutine_simple_2, "call from simple 1--first time")
+            loop.call_now(ftr1, coroutine_simple_2,
+                          "call from simple 1--first time")
             print(f"YIELD -- from _coroutine_simple_1 state {con.state}")
             return ftr1
         if con.state == 1:
@@ -38,8 +43,9 @@ def coroutine_simple_1(message:str):
     con.set_coroutine(_coroutine_simple_1)
     return _coroutine_simple_1(con)
 
-def coroutine_simple_2(message:str):
-    def _coroutine_simple_2(con:_CoroutineContext=_CoroutineContext()):
+
+def coroutine_simple_2(message: str):
+    def _coroutine_simple_2(con: _CoroutineContext = _CoroutineContext()):
         print(f"simple 2 executed with message {con.params.get('message')}")
         raise _CompletionExc("result_activity_2")
 
@@ -48,8 +54,9 @@ def coroutine_simple_2(message:str):
     con.set_coroutine(_coroutine_simple_2)
     return _coroutine_simple_2(con)
 
+
 def common_workflow(name: str):
-    def _common_workflow(con:_CoroutineContext=_CoroutineContext()):
+    def _common_workflow(con: _CoroutineContext = _CoroutineContext()):
         # print(f"common workflow {con.params} called with state= {con.state}")
         loop = _Eventloop.get_current_eventloop()
         name = con.params.get("name")
@@ -94,8 +101,3 @@ def common_workflow(name: str):
     con = _CoroutineContext(params={"name": name})
     con.set_coroutine(_common_workflow)
     return _common_workflow(con)
-
-if __name__ == "__main__":
-    c_runtime = _Eventloop.get_current_eventloop()
-    c_runtime.call_now(None, common_workflow, "GLOVER")
-    c_runtime.run()
