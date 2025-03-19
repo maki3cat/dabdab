@@ -1,84 +1,5 @@
-import time
+from .runtime import _Eventloop, _Future, _CompletionExc
 
-# First topic is still about coroutine
-# TODO: compare this to the python official version to get the basic concepts and working mechanisms of coroutine model
-# TODO: advanced a bit is to support the coroutine with multi-threading implementation using python way?
-
-# Second topic is using the coroutine model with system domains like durable funcitons like Temporal
-
-_PENDING = "pending"
-_DONE = "done"
-# TODO: feature-2
-_CANCELLED = "cancelled"
-# TODO: feature-add timer, suspended not just ready?
-
-# can be threadlocal, depending on the design pattern
-_current_loop = None
-
-# Future shall be a simple 
-# result, state, and callbacks with itself as the parameter
-# set result with trigger callbacks that's why Future connects things
-class _Future:
-    def __init__(self, loop=None, callback: callable=None):
-        self.result = None
-        self.state = "pending"
-        self.loop = loop
-        if loop == None:
-            self.loop = _Eventloop.get_current_eventloop()
-
-        self.callback = callback # only support one callback for now
-        self.chained_future = None
-
-    def set_callback(self, callback: callable):
-        self.callback = callback
-
-    def set_result(self, res=None):
-        self.result = res
-        self.state = "done"
-        if self.callback != None:
-            self.loop.call_now(self.chained_future, self.callback, self)
-
-class _Eventloop:
-    def __init__(self):
-        self.ready = []
-        self._future_tack = []
-
-    @staticmethod
-    def get_current_eventloop():
-        global _current_loop
-        if _current_loop == None:
-            _current_loop = _Eventloop()
-        return _current_loop
-
-    def call_now(self, future: _Future, func: callable, *args, **kwargs): # type: ignore
-        # if future == None:
-        #     future = _Future()
-        self.ready.append((future, func, args, kwargs))
-
-    def run(self):
-        while self.ready:
-            future, func, args, kwargs = self.ready.pop()
-            if future is not None:
-                self._future_tack.append(future)
-            try:
-                print(f"run eventloop -BEFORE- {func.__name__}, {args}, {kwargs}")
-                next_future = func(*args, **kwargs)
-                print(f"run eventloop -AFTER- {func.__name__}, {args}, {kwargs}, {next_future}")
-                next_future.chained_future = future
-            except _CoroutineStop as es:
-                if self._future_tack:
-                    future = self._future_tack.pop()
-                    if future:
-                        future.set_result(es.get_value())
-                # future.set_result(es.get_value())
-
-class _CoroutineStop(Exception):
-    def __init__(self, value:any):
-        self.value = value
-    def get_value(self):
-        return self.value
-
-# CoroutineContext is a simple state machine
 class _CoroutineContext:
     def __init__(
             self, params:dict={}, *, 
@@ -98,7 +19,6 @@ class _CoroutineContext:
         return self.coroutine(self)
 
 def coroutine_simple_1(message:str):
-    # TODO: right now we don't await on multiple futures
     def _coroutine_simple_1(con:_CoroutineContext=_CoroutineContext()):
         loop = _Eventloop.get_current_eventloop()
         if con.state == 0:
@@ -111,7 +31,7 @@ def coroutine_simple_1(message:str):
             return ftr1
         if con.state == 1:
             print("_coroutine_simple_1 completes")
-            raise _CoroutineStop("result_activity_1")
+            raise _CompletionExc("result_activity_1")
 
     con = _CoroutineContext()
     con.params["message"] = message
@@ -121,7 +41,7 @@ def coroutine_simple_1(message:str):
 def coroutine_simple_2(message:str):
     def _coroutine_simple_2(con:_CoroutineContext=_CoroutineContext()):
         print(f"simple 2 executed with message {con.params.get('message')}")
-        raise _CoroutineStop("result_activity_2")
+        raise _CompletionExc("result_activity_2")
 
     con = _CoroutineContext()
     con.params["message"] = message
@@ -169,7 +89,7 @@ def common_workflow(name: str):
         calculation_result = con.history.get("calculation_result")
         final_result = calculation_result + 100
         print(f"Step {con.state}: final result is {final_result}")
-        raise _CoroutineStop(final_result)
+        raise _CompletionExc(final_result)
 
     con = _CoroutineContext(params={"name": name})
     con.set_coroutine(_common_workflow)
