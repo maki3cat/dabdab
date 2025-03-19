@@ -20,12 +20,14 @@ _current_loop = None
 # set result with trigger callbacks that's why Future connects things
 class _Future:
     def __init__(self, loop=None, callback: callable=None):
-        self.callback = callback # only support one callback for now
         self.result = None
         self.state = "pending"
         self.loop = loop
         if loop == None:
             self.loop = _Eventloop.get_current_eventloop()
+
+        self.callback = callback # only support one callback for now
+        self.chained_future = None
 
     def set_callback(self, callback: callable):
         self.callback = callback
@@ -34,7 +36,7 @@ class _Future:
         self.result = res
         self.state = "done"
         if self.callback != None:
-            self.loop.call_now(None, self.callback, self)
+            self.loop.call_now(self.chained_future, self.callback, self)
 
 class _Eventloop:
     def __init__(self):
@@ -59,11 +61,10 @@ class _Eventloop:
             if future is not None:
                 self._future_tack.append(future)
             try:
+                print(f"run eventloop -BEFORE- {func.__name__}, {args}, {kwargs}")
                 next_future = func(*args, **kwargs)
-                # TODO: here has a core problem
-                # func is not finished, we need to wait func to 
-                # finish and then call this future's callback again
-                # or our tasks are lost
+                print(f"run eventloop -AFTER- {func.__name__}, {args}, {kwargs}, {next_future}")
+                next_future.chained_future = future
             except _CoroutineStop as es:
                 if self._future_tack:
                     future = self._future_tack.pop()
@@ -94,8 +95,7 @@ class _CoroutineContext:
     def resume(self, future: _Future):
         print(f"RESUME -- to {self.coroutine.__name__} state {self.state}")
         self.history[self.current_coro] = future.result
-        if self.coroutine != None:
-            self.coroutine(self)
+        return self.coroutine(self)
 
 def coroutine_simple_1(message:str):
     # TODO: right now we don't await on multiple futures
@@ -152,7 +152,6 @@ def common_workflow(name: str):
             future.set_callback(con.resume)
             # maki: key to register the coroutine and future together
             loop.call_now(future, coroutine_simple_1, "first message")
-            print(f"YIELD --- _common_workflow from state {con.state}")
             return future
 
         # state after the coroutine call
@@ -163,7 +162,6 @@ def common_workflow(name: str):
             message = con.history.get("coroutine_simple_1")
 
             ftr2 = _Future(callback=con.resume)
-            ftr2.set_callback(con.resume)
             loop.call_now(ftr2, coroutine_simple_2, message)
             print(f"YIELD --- _common_workflow from state {con.state}")
             return ftr2
@@ -180,5 +178,4 @@ def common_workflow(name: str):
 if __name__ == "__main__":
     c_runtime = _Eventloop.get_current_eventloop()
     c_runtime.call_now(None, common_workflow, "GLOVER")
-    # c_runtime.call_now(None, common_workflow, "REBETA")
     c_runtime.run()
