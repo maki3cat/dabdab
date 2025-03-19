@@ -20,6 +20,7 @@ _current_loop = None
 # set result with trigger callbacks that's why Future connects things
 class _Future:
     def __init__(self, loop=None, callback: callable=None):
+        self.resolve_for = None
         self.callback = callback # only support one callback for now
         self.result = None
         self.state = "pending"
@@ -30,16 +31,26 @@ class _Future:
     def set_callback(self, callback: callable):
         self.callback = callback
 
-    def set_result(self, res=None):
+    def set_result(self, res=None, resolve_for=None):
         self.result = res
         self.state = "done"
         if self.callback != None:
-            self.loop.call_now(None, self.callback, self)
+            self.loop.call_now(resolve_for, self.callback, self)
+
+
+class _Resolver:
+    def __init__(self, call, resolver):
+        self.call = call
+        self.resolver = resolver
+
+    def resolve(self, res):
+        if self.resolver:
+            self.resolver.set_result(res, resolve_for=self.resolver.resolve_for)
+
 
 class _Eventloop:
     def __init__(self):
         self.ready = []
-        self._future_tack = []
 
     @staticmethod
     def get_current_eventloop():
@@ -49,27 +60,21 @@ class _Eventloop:
         return _current_loop
 
     def call_now(self, future: _Future, func: callable, *args, **kwargs): # type: ignore
-        # if future == None:
-        #     future = _Future()
-        self.ready.append((future, func, args, kwargs))
+        self.ready.append((future, _Resolver(func, future), args, kwargs))
 
     def run(self):
         while self.ready:
             future, func, args, kwargs = self.ready.pop()
-            if future is not None:
-                self._future_tack.append(future)
             try:
-                next_future = func(*args, **kwargs)
+                next_future = func.call(*args, **kwargs)
+                if next_future is not None:
+                    next_future.resolve_for = future
                 # TODO: here has a core problem
                 # func is not finished, we need to wait func to 
                 # finish and then call this future's callback again
                 # or our tasks are lost
             except _CoroutineStop as es:
-                if self._future_tack:
-                    future = self._future_tack.pop()
-                    if future:
-                        future.set_result(es.get_value())
-                # future.set_result(es.get_value())
+                func.resolve(es.get_value())
 
 class _CoroutineStop(Exception):
     def __init__(self, value:any):
