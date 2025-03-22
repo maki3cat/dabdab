@@ -1,7 +1,9 @@
 import asyncio
 
+
 def say_hello():
     print("Hello, world!")
+
 
 # Get the event loop
 loop = asyncio.get_event_loop()
