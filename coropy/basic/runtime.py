@@ -1,7 +1,7 @@
 # First topic is still about coroutine
 # TODO: compare this to the python official version to get the basic concepts and working mechanisms of coroutine model
 # TODO: advanced a bit is to support the coroutine with multi-threading implementation using python way?
-# Second topic is using the coroutine model with system domains like durable funcitons like Temporal
+# Second topic is using the coroutine model with system domains like durable funcs like Temporal
 
 _PENDING = "pending"
 _DONE = "done"

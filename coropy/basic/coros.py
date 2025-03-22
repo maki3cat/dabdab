@@ -3,9 +3,7 @@ from .runtime import _Eventloop, _Future, _CompletionExc
 
 class _CoroutineContext:
 
-    def __init__(
-        self, params: dict = {}, *, state: int = 0, history: dict = {}, current_coro=""
-    ):
+    def __init__(self, params: dict = {}, *, state: int = 0, history: dict = {}):
         self.state = state
         self.history = history
         self.current_coro = None
@@ -22,6 +20,7 @@ class _CoroutineContext:
 
 
 def coroutine_simple_1(message: str):
+
     def _coroutine_simple_1(con: _CoroutineContext = _CoroutineContext()):
         loop = _Eventloop.get_current_eventloop()
         if con.state == 0:
@@ -45,6 +44,7 @@ def coroutine_simple_1(message: str):
 
 
 def coroutine_simple_2(message: str):
+
     def _coroutine_simple_2(con: _CoroutineContext = _CoroutineContext()):
         print(f"simple 2 executed with message {con.params.get('message')}")
         raise _CompletionExc("result_activity_2")
@@ -56,6 +56,7 @@ def coroutine_simple_2(message: str):
 
 
 def common_workflow(name: str):
+
     def _common_workflow(con: _CoroutineContext = _CoroutineContext()):
         # print(f"common workflow {con.params} called with state= {con.state}")
         loop = _Eventloop.get_current_eventloop()
